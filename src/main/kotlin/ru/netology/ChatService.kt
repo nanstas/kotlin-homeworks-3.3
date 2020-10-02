@@ -19,8 +19,7 @@ class ChatService {
         val message = Message(ownerId = ownerId, recipientId = recipientId, chatId = chatId, text = text, messageId = messageId)
         val messages = chat.messages.toMutableList()
         messages.add(message)
-        val editChat = if (chat.ownerId == message.ownerId) chat.copy(messages = messages.toList()) else
-            chat.copy(messages = messages.toList())
+        val editChat = chat.copy(messages = messages.toList())
         chats.remove(chat)
         chats.add(editChat)
         return true
@@ -66,6 +65,11 @@ class ChatService {
         return true
     }
 
+    fun getMessages(chatId: Int, messageId: Int, count: Int): List<Message> {
+        val chat = chats.firstOrNull { it.chatId == chatId } ?: throw ChatNotFoundException("no chat with id $chatId")
+        return chat.messages.filter { it.messageId >= messageId }.take(count)
+    }
+
     fun removeMessage(userId: Int, messageId: Int): Boolean {
         val (chat, message) = chats.findMessageById(messageId) ?: return false
         val editMessage =
@@ -106,11 +110,5 @@ class ChatService {
         chats.remove(chat)
         chats.add(editChat)
         return true
-    }
-
-    fun printChats() {
-        for (chat in chats) {
-            println(chat)
-        }
     }
 }
