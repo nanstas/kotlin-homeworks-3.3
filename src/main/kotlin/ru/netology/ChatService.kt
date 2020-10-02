@@ -40,7 +40,7 @@ class ChatService {
 
     fun removeChat(userId: Int, chatId: Int): Boolean {
         val chat = chats.firstOrNull { it.chatId == chatId }
-                ?: return throw ChatNotFoundException("no chat with id $chatId")
+                ?: throw ChatNotFoundException("no chat with id $chatId")
         val removeChat = if (chat.ownerId == userId) chat.copy(isDeleteOwner = true) else chat.copy(isDeleteRecipient = true)
         chats.remove(chat)
         chats.add(removeChat)
@@ -74,7 +74,9 @@ class ChatService {
         val messages = chat.messages.toMutableList()
         messages.remove(message)
         messages.add(editMessage)
-        val editChat = chat.copy(messages = messages)
+        val editChat =
+                if (chat.ownerId == userId) chat.copy(messages = messages, isDeleteOwner = !messages.any { !it.isDeleteOwner }) else
+                    chat.copy(messages = messages, isDeleteRecipient = !messages.any { !it.isDeleteRecipient })
         chats.remove(chat)
         chats.add(editChat)
         return true
