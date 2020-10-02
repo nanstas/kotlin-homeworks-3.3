@@ -6,8 +6,7 @@ data class Message(
     val messageId: Int,
     val chatId: Int,
     val text: String,
-    val isReadOwner: Boolean = false,
-    val isReadRecipient: Boolean = false,
+    val isUnreadRecipient: Boolean = true,
     val isDeleteOwner: Boolean = false,
     val isDeleteRecipient: Boolean = false
 )

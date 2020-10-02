@@ -12,13 +12,39 @@ class ChatService {
         return chat
     }
 
-    fun removeChat(userId: Int, chatId: Int): Chat {
+    fun createMessage(ownerId: Int, recipientId: Int, text: String): Boolean {
+        messageId += 1
+        val chat = chats.firstOrNull { it.recipientId == recipientId && it.ownerId == ownerId || it.recipientId == ownerId && it.ownerId == recipientId }
+                ?: createChat(ownerId, recipientId)
+        val message = Message(ownerId = ownerId, recipientId = recipientId, chatId = chatId, text = text, messageId = messageId)
+        val messages = chat.messages.toMutableList()
+        messages.add(message)
+        val editChat = if (chat.ownerId == message.ownerId) chat.copy(messages = messages.toList()) else
+            chat.copy(messages = messages.toList())
+        chats.remove(chat)
+        chats.add(editChat)
+        return true
+    }
+
+    private inline fun List<Chat>.findMessage(predicate: (Message) -> Boolean): Pair<Chat, Message>? {
+        forEach { chat ->
+            val message = chat.messages.find(predicate) ?: return@forEach
+            return chat to message
+        }
+        return null
+    }
+
+    private fun List<Chat>.findMessageById(messageId: Int): Pair<Chat, Message>? = findMessage {
+        it.messageId == messageId
+    }
+
+    fun removeChat(userId: Int, chatId: Int): Boolean {
         val chat = chats.firstOrNull { it.chatId == chatId }
                 ?: return throw ChatNotFoundException("no chat with id $chatId")
         val removeChat = if (chat.ownerId == userId) chat.copy(isDeleteOwner = true) else chat.copy(isDeleteRecipient = true)
         chats.remove(chat)
         chats.add(removeChat)
-        return removeChat
+        return true
     }
 
     fun getChats(userId: Int): List<Chat> {
@@ -26,77 +52,59 @@ class ChatService {
         return if (userChats.isNotEmpty()) userChats else throw ChatNotFoundException("You have not chat")
     }
 
-    fun createMessage(ownerId: Int, recipientId: Int, text: String): Int {
-        messageId += 1
-        val chat = chats.firstOrNull { it.recipientId == recipientId && it.ownerId == ownerId || it.recipientId == ownerId && it.ownerId == recipientId } ?: createChat(ownerId, recipientId)
-        val message = Message(ownerId = ownerId, recipientId = recipientId, chatId = chatId, text = text, messageId = messageId, isReadOwner = true)
+    fun editMessage(userId: Int, messageId: Int, text: String): Boolean {
+        val (chat, message) = chats.findMessageById(messageId) ?: return false
+        val editMessage =
+                if (message.ownerId == userId && !message.isDeleteOwner) message.copy(text = text, isUnreadRecipient = true) else
+                    throw NotRightsForChangeException("You are not author, you have not rights for change or message is deleted")
         val messages = chat.messages.toMutableList()
-        messages.add(message)
-        val editChat = chat.copy(messages = messages.toList())
+        messages.remove(message)
+        messages.add(editMessage)
+        val editChat = chat.copy(messages = messages)
         chats.remove(chat)
         chats.add(editChat)
-        return message.messageId
-    }
-
-    fun editMessage(userId: Int, messageId: Int, text: String): Message {
-        for (chat in chats) {
-            for (message in chat.messages) {
-                if (message.messageId == messageId) {
-                    val editMessage = if (message.ownerId == userId && !message.isDeleteOwner) message.copy(text = text, isReadOwner = true, isReadRecipient = false) else throw NotRightsForChangeException("You are not author, you have not rights for change or message is deleted")
-                    val messages = chat.messages.toMutableList()
-                    messages.remove(message)
-                    messages.add(editMessage)
-                    val editChat = chat.copy(messages = messages)
-                    chats.remove(chat)
-                    chats.add(editChat)
-                    return editMessage
-                }
-                throw NotRightsForChangeException("You are not author, you have not rights for change")
-            }
-        }
-        throw MessageNotFoundException("Message with id $messageId not found")
+        return true
     }
 
     fun removeMessage(userId: Int, messageId: Int): Boolean {
-        for (chat in chats) {
-            for (message in chat.messages) {
-                if (message.messageId == messageId) {
-                    val editMessage = if (message.ownerId == userId) message.copy(isDeleteOwner = true) else message.copy(isDeleteRecipient = true)
-                    val messages = chat.messages.toMutableList()
-                    messages.remove(message)
-                    messages.add(editMessage)
-                    val editChat = chat.copy(messages = messages)
-                    chats.remove(chat)
-                    chats.add(editChat)
-                    return true
-                }
-            }
-        }
-        return false
+        val (chat, message) = chats.findMessageById(messageId) ?: return false
+        val editMessage =
+                if (message.ownerId == userId) message.copy(isDeleteOwner = true) else
+                    message.copy(isDeleteRecipient = true)
+        val messages = chat.messages.toMutableList()
+        messages.remove(message)
+        messages.add(editMessage)
+        val editChat = chat.copy(messages = messages)
+        chats.remove(chat)
+        chats.add(editChat)
+        return true
     }
 
     fun getUnreadChatsCount(userId: Int): Int {
-
-    }
-
-    fun readMessage(userId: Int, messageId: Int): Message {
-        for (chat in chats) {
+        val chatsUserId = chats.filter { it.ownerId == userId || it.recipientId == userId}
+        var count = 0
+        for (chat in chatsUserId) {
             for (message in chat.messages) {
-                if (message.messageId == messageId) {
-                    val readMessage = if (message.ownerId == userId) message.copy(isReadOwner = true) else message.copy(isReadRecipient = true)
-                    val messages = chat.messages.toMutableList()
-                    messages.remove(message)
-                    messages.add(readMessage)
-                    val editChat = chat.copy(messages = messages)
-                    chats.remove(chat)
-                    chats.add(editChat)
-                    return readMessage
+                if (message.ownerId != userId && message.isUnreadRecipient) {
+                    count++
+                    break
                 }
             }
         }
-        throw MessageNotFoundException("Message with id $messageId not found")
+        return count
     }
 
+    fun readMessage(userId: Int, messageId: Int): Boolean {
+        val (chat, message) = chats.findMessageById(messageId) ?: return false
+        val editMessage = if (message.recipientId == userId) message.copy(isUnreadRecipient = false) else return true
+        val messages = chat.messages.toMutableList()
+        messages.remove(message)
+        messages.add(editMessage)
+        val editChat = chat.copy(messages = messages.toList())
+        chats.remove(chat)
+        chats.add(editChat)
+        return true
+    }
 
     fun printChats() {
         for (chat in chats) {
