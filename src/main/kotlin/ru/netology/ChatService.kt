@@ -46,10 +46,11 @@ class ChatService {
         return true
     }
 
-    fun getChats(userId: Int): List<Chat> {
-        val userChats = chats.filter { it.ownerId == userId && !it.isDeleteOwner || it.recipientId == userId && !it.isDeleteRecipient }
-        return if (userChats.isNotEmpty()) userChats else throw ChatNotFoundException("You have not chat")
-    }
+    fun getChats(userId: Int): List<Chat> =
+            chats.asSequence()
+                    .filter { it.ownerId == userId && !it.isDeleteOwner || it.recipientId == userId && !it.isDeleteRecipient }
+                    .ifEmpty { throw ChatNotFoundException("You have not chat") }
+                    .toList()
 
     fun editMessage(userId: Int, messageId: Int, text: String): Boolean {
         val (chat, message) = chats.findMessageById(messageId) ?: return false
@@ -65,10 +66,13 @@ class ChatService {
         return true
     }
 
-    fun getMessages(chatId: Int, messageId: Int, count: Int): List<Message> {
-        val chat = chats.firstOrNull { it.chatId == chatId } ?: throw ChatNotFoundException("no chat with id $chatId")
-        return chat.messages.filter { it.messageId >= messageId }.take(count)
-    }
+    fun getMessages(chatId: Int, messageId: Int, count: Int): List<Message> =
+            chats.asSequence()
+                    .filter { it.chatId == chatId }
+                    .ifEmpty { throw ChatNotFoundException("no chat with id $chatId") }
+                    .first().messages
+                    .filter { message -> message.messageId >= messageId }
+                    .take(count)
 
     fun removeMessage(userId: Int, messageId: Int): Boolean {
         val (chat, message) = chats.findMessageById(messageId) ?: return false
@@ -86,19 +90,13 @@ class ChatService {
         return true
     }
 
-    fun getUnreadChatsCount(userId: Int): Int {
-        val chatsUserId = chats.filter { it.ownerId == userId || it.recipientId == userId}
-        var count = 0
-        for (chat in chatsUserId) {
-            for (message in chat.messages) {
-                if (message.ownerId != userId && message.isUnreadRecipient) {
-                    count++
-                    break
-                }
-            }
-        }
-        return count
-    }
+    fun getUnreadChatsCount(userId: Int): Int =
+            chats.asSequence()
+                    .filter { it.ownerId == userId || it.recipientId == userId }
+                    .count { chat ->
+                        chat.messages
+                                .any { it.ownerId != userId && it.isUnreadRecipient }
+                    }
 
     fun readMessage(userId: Int, messageId: Int): Boolean {
         val (chat, message) = chats.findMessageById(messageId) ?: return false
